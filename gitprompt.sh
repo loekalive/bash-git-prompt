@@ -6,6 +6,34 @@ function async_run() {
   }&
 }
 
+# the timer functions and workings come from https://stackoverflow.com/a/34812608
+function gp_timer_now {
+    date +%s%N
+}
+
+function gp_timer_start {
+    gp_timer_start=${gp_timer_start:-$(gp_timer_now)}
+}
+
+function gp_timer_stop {
+    local delta_us=$((($(gp_timer_now) - $gp_timer_start) / 1000))
+    local us=$((delta_us % 1000))
+    local ms=$(((delta_us / 1000) % 1000))
+    local s=$(((delta_us / 1000000) % 60))
+    local m=$(((delta_us / 60000000) % 60))
+    local h=$((delta_us / 3600000000))
+    # Goal: always show around 3 digits of accuracy
+    if ((h > 0)); then gp_timer_show=${h}h${m}m
+    elif ((m > 0)); then gp_timer_show=${m}m${s}s
+    elif ((s >= 10)); then gp_timer_show=${s}.$((ms / 100))s
+    elif ((s > 0)); then gp_timer_show=${s}.$(printf %03d $ms)s
+    elif ((ms >= 100)); then gp_timer_show=${ms}ms
+    elif ((ms > 0)); then gp_timer_show=${ms}.$((us / 100))ms
+    else gp_timer_show=${us}us
+    fi
+    unset gp_timer_start
+}
+
 function git_prompt_dir() {
   # assume the gitstatus.sh is in the same directory as this script
   # code thanks to http://stackoverflow.com/questions/59895
@@ -242,6 +270,8 @@ function git_prompt_config() {
   # replace _LAST_COMMAND_STATE_ token with the actual state
   GIT_PROMPT_LAST_COMMAND_STATE=$(gp_format_exit_status ${GIT_PROMPT_LAST_COMMAND_STATE})
   LAST_COMMAND_INDICATOR="${LAST_COMMAND_INDICATOR//_LAST_COMMAND_STATE_/${GIT_PROMPT_LAST_COMMAND_STATE}}"
+  # replace _LAST_COMMAND_TIME_ token with the actual time
+  LAST_COMMAND_INDICATOR="${LAST_COMMAND_INDICATOR//_LAST_COMMAND_TIME_/${gp_timer_show}}"
 
   # Do this only once to define PROMPT_START and PROMPT_END
 
@@ -318,6 +348,7 @@ function update_old_git_prompt() {
 }
 
 function setGitPrompt() {
+  gp_timer_stop
   update_old_git_prompt
 
   local repo=$(git rev-parse --show-toplevel 2> /dev/null)
@@ -688,4 +719,5 @@ function gp_install_prompt {
   source "$__GIT_PROMPT_DIR/git-prompt-help.sh"
 }
 
+trap 'gp_timer_start' DEBUG
 gp_install_prompt
